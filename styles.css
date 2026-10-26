@@ -59,7 +59,9 @@ body.is-locked { overflow: hidden; }
 }
 .is-solid .hbtn, .menu-open .hbtn { background: #fff; border-color: var(--line); }
 .hbtn svg { width: 18px; height: 18px; }
-.hbtn--text { font: 500 10.5px var(--font-body); letter-spacing: .06em; }
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.glyph { fill: currentColor; stroke: none; }
+.hbtn--logo .glyph { width: 20px; height: 20px; }
 /* бургер — без круга, чтобы не путали с кнопками связи */
 /* полоски стоят в колонке с одинаковым промежутком — средняя ровно посередине */
 .burger {
@@ -133,6 +135,22 @@ body.is-locked { overflow: hidden; }
 }
 @keyframes sweep { 0% { transform: translateX(-70%); } 22%, 100% { transform: translateX(70%); } }
 
+/* рукой можно водить: тянуть по интерьеру мышью или пальцем (вертикальная прокрутка на телефоне остаётся) */
+.stage { cursor: grab; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.stage.is-dragging { cursor: grabbing; }
+.screen { pointer-events: auto; touch-action: none; } /* за экран телефона пальцем можно водить во все стороны */
+.stage__img { -webkit-user-drag: none; pointer-events: none; }
+/* подсказка: кнопка спуска то и дело «свайпает» влево по экрану; после первого касания — затихает */
+.screen__shutter { animation: shutter-hint 3.2s ease-in-out 3s infinite; }
+.stage.is-touched .screen__shutter { animation: none; }
+@keyframes shutter-hint {
+  0% { transform: translateX(-50%); opacity: 1; }
+  35% { transform: translateX(-260%); opacity: 0; }
+  36%, 50% { transform: translateX(-50%); opacity: 0; }
+  62%, 100% { transform: translateX(-50%); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .screen__shutter { animation: none; } }
+
 /* появление: рука въезжает снизу */
 .device { opacity: 0; transform: translateY(40px); transition: opacity .7s ease, transform .9s var(--ease); }
 .is-ready .device { opacity: 1; transform: none; }
@@ -148,13 +166,16 @@ body.is-locked { overflow: hidden; }
   font-family: var(--font-head); font-weight: 400; font-size: 35px; line-height: 1.08; letter-spacing: -.01em; color: var(--ink);
 }
 .title em { font-style: normal; color: var(--pink); }
+/* одиночный «вдох-выдох» после счётчиков: scale, а не transform — чтобы не спорить с появлением */
+.title.is-pulse { transform-origin: left center; animation: title-pulse .9s cubic-bezier(.45, 0, .3, 1); }
+@keyframes title-pulse { 0%, 100% { scale: 1; } 45% { scale: 1.04; } }
 
 .actions { display: grid; gap: 10px; margin-top: 20px; }
 .btn {
   display: flex; align-items: center; justify-content: flex-start; gap: 12px;
   min-height: 52px; padding: 0 16px 0 18px; border-radius: var(--btn-radius); border: 1px solid transparent;
   font: 500 15.5px/1.2 var(--font-body); letter-spacing: .005em; text-decoration: none; cursor: pointer;
-  transition: background .25s, border-color .25s, box-shadow .25s, transform .1s;
+  transition: background .25s, border-color .25s, box-shadow .25s, transform .1s, translate .25s var(--ease);
 }
 .btn span { flex: 1; text-align: left; }
 .btn--center span { text-align: center; }
@@ -170,6 +191,36 @@ body.is-locked { overflow: hidden; }
 .btn--ghost { color: var(--ink); background: rgba(255,255,255,.55); border-color: var(--line-strong); }
 .btn--ghost:hover { border-color: #C9B6AA; background: #fff; }
 .btn--block { width: 100%; }
+
+/* «Позвонить напрямую» на десктопе: карточка с номером под кнопкой (на телефоне кнопка сразу звонит) */
+.actions { position: relative; }
+.callpop {
+  position: absolute; z-index: 20; top: calc(100% + 12px); left: 0; width: 380px; padding: 22px 22px 20px;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: 0 24px 48px -20px rgba(63, 58, 77, .35);
+  opacity: 0; transform: translateY(-8px) scale(.98); transform-origin: 30px 0;
+  transition: opacity .25s ease, transform .35s var(--ease);
+}
+.callpop.is-open { opacity: 1; transform: none; }
+.callpop::before { /* «хвостик» к кнопке */
+  content: ""; position: absolute; top: -7px; left: 34px; width: 12px; height: 12px; transform: rotate(45deg);
+  background: var(--card); border-left: 1px solid var(--line); border-top: 1px solid var(--line);
+}
+.callpop__close { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+.callpop__close:hover { background: var(--pink-soft); color: var(--pink); }
+.callpop__close svg { width: 18px; height: 18px; }
+.callpop__label { margin: 0 0 6px; font: 500 11px/1.4 var(--font-body); letter-spacing: .1em; text-transform: uppercase; color: var(--kicker); }
+.callpop__phone { margin: 0 0 14px; font-family: var(--font-head); font-size: 32px; line-height: 1.1; color: var(--ink); white-space: nowrap; }
+.callpop__copy {
+  padding: 9px 14px; border: 1px solid var(--line-strong); border-radius: 999px; background: transparent;
+  font: 500 13.5px var(--font-body); color: var(--ink); cursor: pointer; transition: border-color .2s, color .2s, background .2s;
+}
+.callpop__copy:hover { border-color: var(--pink); color: var(--pink); }
+.callpop__copy.is-done { border-color: var(--pink); background: var(--pink); color: #fff; }
+.callpop__qr { display: flex; gap: 16px; align-items: center; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+.callpop__qr img { flex: none; width: 104px; height: 104px; padding: 8px; background: #fff; border: 1px solid var(--line); border-radius: 12px; }
+.callpop__qr p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--text); }
+.callpop__qr b { display: block; margin-bottom: 4px; font-weight: 500; color: var(--ink); }
 .note { margin: 12px 0 0; font-size: 13px; color: var(--muted); }
 
 .stats { list-style: none; margin: 16px 0 0; padding: 14px 0 0; display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); }
@@ -177,7 +228,7 @@ body.is-locked { overflow: hidden; }
 .stats li + li { border-left: 1px solid var(--line); }
 .stats b { display: block; font-family: var(--font-head); font-weight: 400; font-size: 20px; line-height: 1.1; color: var(--ink); }
 .stats b small { font-size: 14px; color: var(--pink); }
-.stats span { display: block; margin-top: 3px; font: 500 10.5px/1.2 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.stats li > span { display: block; margin-top: 3px; font: 500 10.5px/1.2 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 
 .next-placeholder { margin: 40px 16px 60px; padding: 40px 16px; border: 1px dashed var(--line-strong); border-radius: var(--radius); text-align: center; color: var(--muted); font-size: 14px; }
 .todo { padding: 0 4px; border-radius: 4px; background: #FFF1C2; color: #7A5B00; font-size: .9em; }
@@ -264,6 +315,96 @@ body.is-locked { overflow: hidden; }
 .link { padding: 0; border: 0; background: none; font: 500 13px var(--font-body); color: var(--pink); cursor: pointer; text-align: right; }
 .link:hover { text-decoration: underline; text-underline-offset: 3px; }
 
+/* ---------- Появление при прокрутке ----------
+   Работает только если скрипт загрузился (класс .js на <html>); без него всё видно сразу.
+   Задержка --d задаётся скриптом для очереди внутри [data-reveal-seq].
+   Подъём при наведении сделан через translate, а не transform, — чтобы не спорить с появлением;
+   поэтому translate, тень и фон тоже в списке переходов, но без задержки. */
+.js [data-reveal] {
+  opacity: 0; transform: translateY(26px);
+  transition: opacity .7s ease, transform .9s var(--ease), translate .35s var(--ease), box-shadow .35s ease, background .25s, border-color .25s;
+  transition-delay: var(--d, 0ms), var(--d, 0ms), 0s, 0s, 0s, 0s;
+}
+.js [data-reveal].is-in { opacity: 1; transform: none; }
+
+/* отзывы въезжают справа, как следующая карточка листалки. Двигаем содержимое, а не саму карточку:
+   листалка с привязкой к краю карточек иначе подкручивается вслед за сдвигом и в конце прыгает обратно */
+.js [data-reveal="slide"] { transform: none; }
+.js [data-reveal="slide"] > * { transform: translateX(40px); transition: transform .9s var(--ease) var(--d, 0ms); }
+.js [data-reveal="slide"].is-in > * { transform: none; }
+/* фото открываются из-под маски снизу вверх и чуть «доезжают» по масштабу */
+.js [data-reveal="mask"] { transform: none; }
+.js [data-reveal="mask"] .ba { clip-path: inset(0 0 100% 0); transition: clip-path 1.1s var(--ease) calc(var(--d, 0ms) + 100ms); }
+.js [data-reveal="mask"] .ba img { transform: scale(1.08); transition: transform 1.6s var(--ease) calc(var(--d, 0ms) + 100ms); }
+.js [data-reveal="mask"].is-in .ba { clip-path: inset(0 0 0 0); }
+.js [data-reveal="mask"].is-in .ba img { transform: none; }
+/* карточки услуг: фото внутри чуть приближается к норме */
+.js .service[data-reveal] img { transform: scale(1.1); transition: transform 1.4s var(--ease) var(--d, 0ms); }
+.js .service[data-reveal].is-in img { transform: none; }
+/* иконки и номера «выпрыгивают» вслед за карточкой */
+.js [data-reveal] .why__icon svg { transform: scale(.6) rotate(-12deg); transition: transform .6s cubic-bezier(.3, 1.5, .5, 1) calc(var(--d, 0ms) + 260ms); }
+.js [data-reveal] .types__num { display: inline-block; opacity: 0; transform: translateY(10px); transition: opacity .5s ease calc(var(--d, 0ms) + 180ms), transform .6s cubic-bezier(.3, 1.5, .5, 1) calc(var(--d, 0ms) + 180ms); }
+.js [data-reveal].is-in .why__icon svg, .js [data-reveal].is-in .types__num { opacity: 1; transform: none; }
+/* звёзды отзыва загораются слева направо */
+.js [data-reveal] .review__stars {
+  color: transparent; -webkit-background-clip: text; background-clip: text;
+  background-image: linear-gradient(90deg, var(--pink) 50%, var(--line-strong) 50%); background-size: 200% 100%; background-position: 100% 0;
+  transition: background-position 1s var(--ease) calc(var(--d, 0ms) + 350ms);
+}
+.js [data-reveal].is-in .review__stars { background-position: 0 0; }
+/* кот выглядывает из-за нижнего края подвала */
+.js [data-reveal="cat"] { opacity: 1; transform: none; }
+.js [data-reveal="cat"] img { translate: 0 45%; transition: translate 1.2s cubic-bezier(.25, 1.25, .4, 1) calc(var(--d, 0ms) + 200ms); }
+.js [data-reveal="cat"].is-in img { translate: 0 0; }
+
+/* «Для бизнеса»: при первом появлении карточка всплывает, а внутри — то же, что при смене вкладки */
+.js [data-reveal="panel"] { opacity: 1; transform: none; }
+.js [data-reveal="panel"] .biz__panel { opacity: 0; transform: translateY(26px); transition: opacity .7s ease var(--d, 0ms), transform .9s var(--ease) var(--d, 0ms); }
+.js [data-reveal="panel"].is-in .biz__panel { opacity: 1; transform: none; }
+.js [data-reveal="panel"].is-in .biz__panel:not(.is-swap) img { animation: swap-img .8s var(--ease) calc(var(--d, 0ms) + 150ms) both; }
+.js [data-reveal="panel"].is-in .biz__panel:not(.is-swap) > div > * { animation: swap-text .6s var(--ease) calc(var(--d, 0ms) + 250ms) both; }
+.js [data-reveal="panel"].is-in .biz__panel:not(.is-swap) > div > p { animation-delay: calc(var(--d, 0ms) + 330ms); }
+/* смена вкладки «Для бизнеса»: фото проявляется с лёгким приближением, текст подъезжает */
+.biz__panel.is-swap img { animation: swap-img .7s var(--ease) both; }
+.biz__panel.is-swap > div > * { animation: swap-text .55s var(--ease) both; }
+.biz__panel.is-swap > div > p { animation-delay: .08s; }
+@keyframes swap-img { from { opacity: 0; transform: scale(1.04); } }
+@keyframes swap-text { from { opacity: 0; transform: translateY(12px); } }
+
+/* наведение (только там, где есть мышь) */
+@media (hover: hover) {
+  .why__item, .service, .review, .step__card { transition: translate .35s var(--ease), box-shadow .35s ease; }
+  .why__item:hover, .service:hover, .review:not(.review--empty):hover, .step__card:hover { translate: 0 -4px; box-shadow: 0 14px 30px -18px rgba(63, 58, 77, .35); }
+  .service img { transition: transform .6s var(--ease); }
+  .service:hover img, .js .service[data-reveal].is-in:hover img { transform: scale(1.04); transition-duration: .6s; transition-delay: 0s; }
+  .btn:hover { translate: 0 -2px; }
+  .btn--primary:hover { box-shadow: 0 12px 22px -10px rgba(185, 61, 138, .75), inset 0 1px 0 rgba(255,255,255,.18); }
+}
+/* привязка к прокрутке: прогресс --p (0…1) задаёт скрипт */
+.js [data-reveal].is-scrub { opacity: var(--p, 0); transform: translateY(calc((1 - var(--p, 0)) * 26px)); transition: opacity .12s linear, transform .12s linear; }
+
+/* этап: карточка выезжает справа, номер «выпрыгивает», линия к следующему этапу прорисовывается вниз */
+.js [data-reveal="step"] { transform: none; opacity: 1; }
+.js [data-reveal="step"] .step__card { opacity: 0; transform: translateX(28px); transition: opacity .6s ease, transform .8s var(--ease), translate .35s var(--ease), box-shadow .35s ease; transition-delay: calc(var(--d, 0ms) + 120ms), calc(var(--d, 0ms) + 120ms), 0s, 0s; }
+.js [data-reveal="step"] .step__num { opacity: 0; transform: scale(.5); transition: opacity .4s ease, transform .55s cubic-bezier(.3, 1.6, .5, 1); transition-delay: var(--d, 0ms); }
+.js [data-reveal="step"]::before { transform: scaleY(0); transform-origin: top; transition: transform .7s var(--ease); transition-delay: calc(var(--d, 0ms) + 300ms); }
+.js [data-reveal="step"] .step__icon svg { transform: scale(.6) rotate(-12deg); transition: transform .6s cubic-bezier(.3, 1.5, .5, 1); transition-delay: calc(var(--d, 0ms) + 380ms); }
+.js [data-reveal="step"].is-in .step__card,
+.js [data-reveal="step"].is-in .step__num { opacity: 1; transform: none; }
+.js [data-reveal="step"].is-in::before { transform: none; }
+.js [data-reveal="step"].is-in .step__icon svg { transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .js [data-reveal], .js [data-reveal="step"] .step__card, .js [data-reveal="step"] .step__num,
+  .js [data-reveal="step"]::before, .js [data-reveal="step"] .step__icon svg,
+  .js [data-reveal] img, .js [data-reveal] .why__icon svg, .js [data-reveal] .types__num { opacity: 1 !important; transform: none !important; translate: none !important; transition: none !important; }
+  .js [data-reveal] .ba { clip-path: none !important; transition: none !important; }
+  .js [data-reveal="slide"] > *, .js [data-reveal="panel"] .biz__panel { opacity: 1 !important; transform: none !important; transition: none !important; }
+  .js [data-reveal="panel"] .biz__panel img, .js [data-reveal="panel"] .biz__panel > div > * { animation: none !important; } /* у .ba__before своя маска шторки — её не трогаем */
+  .js [data-reveal] .review__stars { background-position: 0 0 !important; transition: none !important; }
+  .biz__panel.is-swap img, .biz__panel.is-swap > div > * { animation: none !important; }
+}
+
 /* ---------- Как проходит работа ----------
    Телефон и планшет: заголовок → этапы → карточка «Давайте начнём». Десктоп: вводная с карточкой слева. */
 .process { display: flex; flex-direction: column; }
@@ -338,9 +479,10 @@ body.is-locked { overflow: hidden; }
 .faq summary::after { /* плюс в розовом кружке, в открытом состоянии — минус */
   content: ""; position: absolute; right: 0; top: 50%; width: 30px; height: 30px; margin-top: -15px; border-radius: 50%; border: 1px solid var(--pink);
   background: linear-gradient(var(--pink), var(--pink)) center / 11px 1.5px no-repeat, linear-gradient(var(--pink), var(--pink)) center / 1.5px 11px no-repeat;
-  transition: background-size .2s;
+  transition: transform .4s var(--ease), background-color .3s;
 }
-.faq details[open] summary::after { background-size: 11px 1.5px, 1.5px 0; }
+.faq details[open]:not(.is-closing) summary::after { transform: rotate(135deg); } /* плюс поворачивается в крестик */
+.faq details[open] p { animation: swap-text .45s var(--ease) .05s both; }
 .faq p { margin: 0 0 20px; padding-right: 44px; font-size: 15px; line-height: 1.6; color: var(--text); }
 
 /* ---------- Подвал ---------- */
@@ -357,7 +499,12 @@ body.is-locked { overflow: hidden; }
 .footer__label { margin: 0 0 6px; font: 500 10.5px/1.2 var(--font-body); letter-spacing: .1em; text-transform: uppercase; color: #F2A9D6; }
 .footer__cols p { margin: 0 0 6px; font-size: 15px; line-height: 1.5; }
 .footer__phone { font-family: var(--font-head); font-size: 20px; text-decoration: none; }
-.footer__links { display: flex; gap: 16px; }
+.footer__links { display: flex; align-items: center; gap: 18px; margin-top: 12px !important; }
+.footer__links a { display: block; line-height: 0; transition: translate .25s var(--ease), opacity .25s; }
+.footer__links a { color: #fff; }
+.footer__links .glyph--max { width: 30px; height: 30px; }
+.footer__links .glyph--vk { width: 38px; height: 24px; } /* знак VK шире, чем выше: по высоте букв — на глаз как бабл MAX */
+@media (hover: hover) { .footer__links a:hover { translate: 0 -2px; } }
 .footer__bottom { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-top: 36px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,.12); font-size: 13px; color: #A69FB4; }
 .footer__bottom a { color: #A69FB4; }
 .footer__cat { position: relative; height: 230px; margin: 0 -16px; overflow: hidden; }
@@ -482,16 +629,22 @@ body.is-locked { overflow: hidden; }
 
   .stage { height: clamp(600px, 50vw, 860px); } /* по высоте картинки-панели — без пустоты под первым экраном */
   .hero + .section { padding-top: 48px; }
-  /* интерьер — панелью справа, края растворяются в фон; слева чистое поле под текст */
+  /* интерьер — панелью справа, края растворяются в фон; слева чистое поле под текст.
+     Картинка поднята на 4vw: меньше стены сверху, диван ближе к центру первого экрана */
   .stage__img {
-    width: 66vw; left: auto; right: -2vw; top: 50%; transform: translateY(-50%);
-    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 24%), linear-gradient(transparent 0, #000 14%, #000 84%, transparent 100%);
+    width: 66vw; left: auto; right: -2vw; top: 50%; transform: translateY(calc(-50% - 4vw));
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 15%), linear-gradient(transparent 0, #000 7%, #000 90%, transparent 100%);
     -webkit-mask-composite: source-in;
-            mask-image: linear-gradient(90deg, transparent 0, #000 24%), linear-gradient(transparent 0, #000 14%, #000 84%, transparent 100%);
+            mask-image: linear-gradient(90deg, transparent 0, #000 15%), linear-gradient(transparent 0, #000 7%, #000 90%, transparent 100%);
             mask-composite: intersect;
   }
-  .stage::before { display: none; }
-  .stage::after { top: auto; height: 220px; background: linear-gradient(rgba(247,242,238,0), var(--bg) 75%); } /* предплечье уходит под фон */
+  /* мягкая подложка цвета фона под текстом — во всю высоту первого экрана, без краёв;
+     лежит над интерьером, но под рукой с телефоном (z-index руки — 4) */
+  .stage::before {
+    z-index: 3; right: auto; bottom: 0; height: auto; width: calc(6vw + min(520px, 40vw) + 90px);
+    background: linear-gradient(90deg, var(--bg) 62%, rgba(247,242,238,0));
+  }
+  .stage::after { top: auto; height: 150px; background: linear-gradient(rgba(247,242,238,0), var(--bg) 85%); } /* предплечье уходит под фон */
   .device { --dw: 820px; left: calc(83% - .4988 * var(--dw)); top: calc(50% - 250px - .2477 * var(--dw)); }
 
   .hero { position: relative; }

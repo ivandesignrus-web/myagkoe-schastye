@@ -8,11 +8,16 @@
   // ---------- Рука с телефоном и «живое» превью камеры ----------
   // Диван на room-after.jpg (доли картинки): правая половина 0.524–0.804 по ширине, центр по высоте ≈ 0.70.
   var VIEW = { cx: 0.665, cy: 0.70, span: 0.28 };
+  var CX_MIN = 0.335;                                          // камера у левого подлокотника (диван — 0.235–0.82 ширины кадра)
   var IMG_RATIO = 1493 / 2000;
   var device = document.getElementById('device');
   var move = document.getElementById('deviceMove');
   var screenEl = document.getElementById('screen');
+  var stage = document.getElementById('stage');
+  var stageImg = stage.querySelector('.stage__img');
   var t0 = 0;
+  var off = 0, offTarget = 0;                                  // сдвиг руки, который задаёт посетитель: по горизонтали (px, влево — минус)
+  var offY = 0, offYTarget = 0;                                //   и по вертикали (вниз — плюс)
 
   function frame(now) {
     if (!t0) t0 = now;
@@ -21,14 +26,18 @@
     var dx = Math.sin(t * 2 * Math.PI / 9) * 12 * scale;       // лёгкий дрейф влево-вправо
     var dy = Math.sin(t * 2 * Math.PI / 5) * 8 * scale;        // «невесомость» вверх-вниз
     var rot = Math.sin(t * 2 * Math.PI / 7) * 1.1;
-    move.style.transform = 'translate(' + dx.toFixed(2) + 'px,' + dy.toFixed(2) + 'px) rotate(' + rot.toFixed(3) + 'deg)';
+    off += (offTarget - off) * (still ? 1 : 0.22);             // рука догоняет палец с лёгкой инерцией
+    offY += (offYTarget - offY) * (still ? 1 : 0.22);
+    move.style.transform = 'translate(' + (dx + off).toFixed(2) + 'px,' + (dy + offY).toFixed(2) + 'px) rotate(' + rot.toFixed(3) + 'deg)';
 
-    // камера смотрит на правую половину дивана; движение руки передаётся на картинку в экране
+    // камера смотрит на тот участок дивана, над которым держат телефон; дрейф руки тоже передаётся на картинку
+    var cx = Math.max(CX_MIN, VIEW.cx + off / stageImg.offsetWidth);
+    var cy = VIEW.cy + offY / stageImg.offsetHeight;          // выше-ниже камера смотрит само собой — фото в экране не даёт уйти за край
     var W = screenEl.offsetWidth, H = screenEl.offsetHeight;
     var zoom = 1 + 0.025 * Math.sin(t * 2 * Math.PI / 6);      // автофокус «дышит»
     var imgW = 1.15 * W / VIEW.span * zoom, imgH = imgW * IMG_RATIO;
-    var px = W / 2 - VIEW.cx * imgW - dx * 2.6;
-    var py = H * 0.46 - VIEW.cy * imgH - dy * 1.6;
+    var px = W / 2 - cx * imgW - dx * 2.6;
+    var py = H * 0.46 - cy * imgH - dy * 1.6;
     px = Math.min(0, Math.max(W - imgW, px));                  // фото всегда закрывает весь экран
     py = Math.min(0, Math.max(H - imgH, py));
     screenEl.style.backgroundSize = imgW.toFixed(1) + 'px ' + imgH.toFixed(1) + 'px';
@@ -40,6 +49,194 @@
   var handImg = document.querySelector('.hand');
   if (handImg.complete) start(); else handImg.addEventListener('load', start);
   addEventListener('resize', function () { if (still) requestAnimationFrame(frame); });
+
+  // Посетитель водит рукой: тянет мышью или пальцем по интерьеру и «снимает» диван от правого края до левого, выше и ниже.
+  // Пределы: влево — до левого подлокотника, но на десктопе не заезжая под текст, на телефоне — не за край;
+  // вверх — под шапку можно, только где в ней пусто (не на меню и не на телефоне); вниз — немного,
+  // пока низ экрана не уходит в растворение интерьера.
+  function limits() {
+    var s = screenEl.getBoundingClientRect();
+    var left0 = s.left - off, top0 = s.top - offY;             // где экран стоит без сдвига
+    var room = innerWidth >= 1024
+      ? left0 - document.querySelector('.intro').getBoundingClientRect().right - 32
+      : left0 - 12;
+    return {
+      left: Math.max(0, Math.min(room, (VIEW.cx - CX_MIN) * stageImg.offsetWidth)),
+      down: Math.max(40, Math.min(120, stage.getBoundingClientRect().bottom - 40 - (top0 + s.height)))
+    };
+  }
+  function upLimit(x) {                                        // x — сдвиг руки по горизонтали, при котором проверяем
+    var s = screenEl.getBoundingClientRect();
+    var left = s.left - off + x, right = left + s.width, top0 = s.top - offY;
+    var headerBottom = document.getElementById('header').getBoundingClientRect().bottom;
+    var busy = Array.prototype.some.call(document.querySelectorAll('.nav, .header__right'), function (el) {
+      var r = el.getBoundingClientRect();
+      return r.width && r.left < right && r.right > left;
+    });
+    return Math.max(0, Math.min(160, top0 - headerBottom + (busy ? -8 : 120)));
+  }
+  var drag = null;
+  stage.addEventListener('pointerdown', function (e) {
+    if (e.button !== 0) return;
+    // палец по интерьеру — только вбок (иначе страницу не прокрутить); за экран телефона и мышью — в любую сторону
+    var free = e.pointerType !== 'touch' || !!e.target.closest('.screen');
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, fromX: offTarget, fromY: offYTarget, free: free, lim: limits() };
+    stage.setPointerCapture(e.pointerId);
+    stage.classList.add('is-touched', 'is-dragging');          // подсказка больше не нужна
+  });
+  stage.addEventListener('pointermove', function (e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    offTarget = Math.max(-drag.lim.left, Math.min(0, drag.fromX + e.clientX - drag.x));
+    if (drag.free) offYTarget = Math.max(-upLimit(offTarget), Math.min(drag.lim.down, drag.fromY + e.clientY - drag.y));
+    if (still) requestAnimationFrame(frame);
+  });
+  function endDrag(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag = null;
+    stage.classList.remove('is-dragging');
+  }
+  stage.addEventListener('pointerup', endDrag);
+  stage.addEventListener('pointercancel', endDrag);
+  addEventListener('resize', function () {
+    var lim = limits();
+    offTarget = Math.max(-lim.left, offTarget);
+    offYTarget = Math.max(-upLimit(offTarget), Math.min(lim.down, offYTarget));
+  });
+
+  // ---------- Что запускается вместе с появлением блока ----------
+  var easeOut = function (t) { return 1 - Math.pow(1 - t, 3); };
+  function onReveal(el, delay) {
+    // цифры на первом экране считаются до своего значения
+    var counters = el.querySelectorAll('[data-count]');
+    if (counters.length) {
+      // когда цифры досчитали, заголовок «вдыхает» — возвращаем внимание к главному обещанию
+      setTimeout(function () { document.querySelector('.title').classList.add('is-pulse'); }, delay + 250 + 1300 + 150);
+    }
+    counters.forEach(function (n) {
+      var to = parseFloat(n.getAttribute('data-count'));
+      var from = parseFloat(n.getAttribute('data-count-from')) || 0;
+      var dec = (n.getAttribute('data-count').split('.')[1] || '').length;
+      n.textContent = from.toFixed(dec);
+      setTimeout(function () {
+        var t0 = performance.now();
+        (function tick(now) {
+          var t = Math.min(1, (now - t0) / 1300);
+          n.textContent = (from + (to - from) * easeOut(t)).toFixed(dec);
+          if (t < 1) requestAnimationFrame(tick);
+        })(t0);
+      }, delay + 250);
+    });
+    // шторка «было / стало» один раз сама качается — подсказка, что её можно тянуть
+    var box = el.querySelector('.ba');
+    if (box) setTimeout(function () { hintSlider(box); }, delay + 1300);
+  }
+  function hintSlider(box) {
+    var range = box.querySelector('.ba__range'), t0 = performance.now(), stop = false;
+    var cancel = function () { stop = true; };
+    box.addEventListener('pointerdown', cancel, { once: true });
+    (function tick(now) {
+      if (stop) return;
+      var t = Math.min(1, (now - t0) / 1800);
+      var pos = 50 - 16 * Math.sin(t * 2 * Math.PI) * (1 - t * 0.5);   // влево, вправо и обратно в центр
+      range.value = pos;
+      box.style.setProperty('--pos', pos + '%');
+      if (t < 1) requestAnimationFrame(tick);
+    })(t0);
+  }
+
+  // ---------- Появление при прокрутке ----------
+  // Очередь: в [data-reveal-seq="N"] всё, что уже на экране, появляется разом с шагом N мс по порядку разметки.
+  // Остальное въезжает само, когда до него докрутят.
+  // [data-reveal-after="селектор"] ждёт, пока появится указанный элемент той же очереди, и выходит сразу за ним.
+  var revealEls = document.querySelectorAll('[data-reveal]');
+  if (still || !('IntersectionObserver' in window)) {
+    revealEls.forEach(function (el) { el.classList.add('is-in'); });
+  } else {
+    var onScreen = function (el) {
+      var r = el.getBoundingClientRect();
+      return r.top < innerHeight * 0.92 && r.bottom > 0;
+    };
+    var waitsFor = function (el) {
+      var sel = el.getAttribute('data-reveal-after');
+      var target = sel && el.closest('[data-reveal-seq]').querySelector(sel);
+      return target && !target.classList.contains('is-in') ? target : null;
+    };
+    var show = function (el, delay) {
+      el.style.setProperty('--d', delay + 'ms');
+      el.classList.add('is-in');
+      io.unobserve(el);              // анимируем один раз
+      // после появления задержка больше не нужна — иначе с ней же сработает и наведение
+      setTimeout(function () { el.style.removeProperty('--d'); }, delay + 1800);
+      onReveal(el, delay);
+      var seq = el.closest('[data-reveal-seq]');
+      if (!seq) return;
+      var step = parseInt(seq.getAttribute('data-reveal-seq'), 10) || 100;
+      seq.querySelectorAll('[data-reveal-after]:not(.is-in):not(.is-scrub)').forEach(function (next) {
+        if (!waitsFor(next) && onScreen(next)) show(next, delay + step * 2);
+      });
+    };
+    var io = new IntersectionObserver(function (entries) {
+      var seqs = [];
+      entries.forEach(function (e) {
+        if (!e.isIntersecting || e.target.classList.contains('is-in')) return;
+        var seq = e.target.closest('[data-reveal-seq]');
+        if (!seq) return show(e.target, 0);
+        if (seqs.indexOf(seq) < 0) seqs.push(seq);
+      });
+      seqs.forEach(function (seq) {
+        var step = parseInt(seq.getAttribute('data-reveal-seq'), 10) || 100;
+        Array.prototype.slice.call(seq.querySelectorAll('[data-reveal]:not(.is-in):not(.is-scrub)'))
+          .filter(function (el) { return onScreen(el) && !waitsFor(el); })
+          .forEach(function (el, i) { if (!el.classList.contains('is-in')) show(el, i * step); });
+      });
+    }, { threshold: 0.15, rootMargin: '0px 0px -8% 0px' });
+    revealEls.forEach(function (el) { io.observe(el); });
+    // у самого низа страницы нижняя полоса экрана (её исключает rootMargin) уже не прокрутится вверх —
+    // показываем всё, что в ней осталось
+    var tail = function () {
+      if (scrollY + innerHeight < document.documentElement.scrollHeight - 4) return;
+      var left = Array.prototype.slice.call(document.querySelectorAll('[data-reveal]:not(.is-in):not(.is-scrub)'))
+        .filter(function (el) { var r = el.getBoundingClientRect(); return r.height && r.top < innerHeight && r.bottom > 0; });
+      left.forEach(function (el, i) { show(el, i * 110); });
+      if (!document.querySelector('[data-reveal]:not(.is-in)')) removeEventListener('scroll', tail);
+    };
+    addEventListener('scroll', tail, { passive: true });
+
+    // [data-reveal-scrub="селектор"] на десктопе проявляется вместе с прокруткой: начинает, когда
+    // указанный элемент целиком показался снизу, и заканчивает, когда его центр сравнялся с центром блока.
+    var wide = matchMedia('(min-width: 1024px)');
+    document.querySelectorAll('[data-reveal-scrub]').forEach(function (el) {
+      var target = el.closest('[data-reveal-seq]').querySelector(el.getAttribute('data-reveal-scrub'));
+      var ticking = false;
+      var update = function () {
+        ticking = false;
+        if (el.classList.contains('is-in')) return;
+        if (!wide.matches) {                            // на телефоне — обычная очередь
+          if (el.classList.contains('is-scrub')) { el.classList.remove('is-scrub'); io.observe(el); }
+          return;
+        }
+        if (!el.classList.contains('is-scrub')) { el.classList.add('is-scrub'); io.unobserve(el); }
+        var t = target.getBoundingClientRect(), r = el.getBoundingClientRect();
+        var shift = (1 - (parseFloat(el.style.getPropertyValue('--p')) || 0)) * 26;   // свой сдвиг из анимации не считаем
+        var to = r.top - shift + r.height / 2 + 24;     // центр блока (+ запас: у конца секции sticky отпускает чуть раньше)
+        // старт — когда цель целиком на экране и до центра блока осталось меньше её высоты
+        var from = Math.min(innerHeight - t.height / 2, to + t.height * 0.8);
+        var now = t.top + t.height / 2;
+        var p = from > to ? (from - now) / (from - to) : (now <= from ? 1 : 0);
+        p = Math.max(0, Math.min(1, p));
+        el.style.setProperty('--p', p.toFixed(3));
+        if (p === 1) {                                  // доиграли — фиксируем и отключаемся
+          el.classList.add('is-in');
+          el.classList.remove('is-scrub');
+          removeEventListener('scroll', onScroll);
+        }
+      };
+      var onScroll = function () { if (!ticking) { ticking = true; requestAnimationFrame(update); } };
+      addEventListener('scroll', onScroll, { passive: true });
+      addEventListener('resize', onScroll);
+      update();
+    });
+  }
 
   // ---------- Было / стало: шторка ----------
   document.querySelectorAll('.ba').forEach(function (box) {
@@ -87,9 +284,13 @@
     function select(tab) {
       tabs.forEach(function (t) {
         var on = t === tab;
+        var panel = document.getElementById(t.getAttribute('aria-controls'));
+        if (on && panel.hidden) {               // новая карточка проявляется, а не появляется скачком
+          panel.classList.remove('is-swap'); void panel.offsetWidth; panel.classList.add('is-swap');
+        }
         t.setAttribute('aria-selected', on);
         t.tabIndex = on ? 0 : -1;
-        document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+        panel.hidden = !on;
       });
       tab.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
     }
@@ -102,6 +303,58 @@
         var n = tabs[(i + d + tabs.length) % tabs.length]; select(n); n.focus();
       });
     });
+  });
+
+  // ---------- Вопросы: ответ раскрывается плавно по высоте ----------
+  document.querySelectorAll('.faq details').forEach(function (d) {
+    var sum = d.querySelector('summary'), anim = null;
+    sum.addEventListener('click', function (e) {
+      if (still || !d.animate) return;
+      e.preventDefault();
+      var from = d.offsetHeight, to;
+      if (anim) anim.cancel();
+      if (d.open && !d.classList.contains('is-closing')) {
+        d.classList.add('is-closing');
+        to = sum.offsetHeight + (d.offsetHeight - d.clientHeight);   // высота вопроса + нижняя линия
+      } else {
+        d.classList.remove('is-closing');
+        d.open = true;
+        to = d.offsetHeight;
+      }
+      d.style.overflow = 'hidden';
+      anim = d.animate({ height: [from + 'px', to + 'px'] }, { duration: 380, easing: 'cubic-bezier(.2, .7, .2, 1)' });
+      anim.onfinish = function () {
+        if (d.classList.contains('is-closing')) { d.open = false; d.classList.remove('is-closing'); }
+        d.style.overflow = ''; anim = null;
+      };
+    });
+  });
+
+  // ---------- «Позвонить напрямую» на десктопе ----------
+  // С компьютера ссылка tel: часто никуда не ведёт, поэтому там показываем карточку: номер, копирование и QR для смартфона.
+  var callBtn = document.getElementById('callBtn'), callPop = document.getElementById('callPop');
+  var desktop = matchMedia('(min-width: 1024px) and (hover: hover)');
+  function setCallPop(open) {
+    callBtn.setAttribute('aria-expanded', open);
+    if (open) { callPop.hidden = false; requestAnimationFrame(function () { callPop.classList.add('is-open'); }); }
+    else { callPop.classList.remove('is-open'); setTimeout(function () { if (!callPop.classList.contains('is-open')) callPop.hidden = true; }, 300); }
+  }
+  callBtn.addEventListener('click', function (e) {
+    if (!desktop.matches) return;                              // на телефоне — обычный звонок
+    e.preventDefault();
+    setCallPop(callPop.hidden);
+  });
+  callPop.querySelector('.callpop__close').addEventListener('click', function () { setCallPop(false); callBtn.focus(); });
+  document.addEventListener('click', function (e) {             // клик мимо карточки закрывает её
+    if (!callPop.hidden && !callPop.contains(e.target) && !callBtn.contains(e.target)) setCallPop(false);
+  });
+  var copyBtn = document.getElementById('copyPhone');
+  copyBtn.addEventListener('click', function () {
+    var done = function () {
+      copyBtn.textContent = 'Номер скопирован'; copyBtn.classList.add('is-done');
+      setTimeout(function () { copyBtn.textContent = 'Скопировать номер'; copyBtn.classList.remove('is-done'); }, 2000);
+    };
+    if (navigator.clipboard) navigator.clipboard.writeText('+79271903602').then(done, function () {});
   });
 
   // ---------- Шапка: подложка при прокрутке ----------
@@ -145,7 +398,8 @@
   sheet.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', closeSheet); });
   addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
-    if (!sheet.hidden) closeSheet(); else if (document.body.classList.contains('menu-open')) setMenu(false);
+    if (!callPop.hidden) { setCallPop(false); callBtn.focus(); }
+    else if (!sheet.hidden) closeSheet(); else if (document.body.classList.contains('menu-open')) setMenu(false);
   });
 
   // свайп вниз по шторке закрывает её
